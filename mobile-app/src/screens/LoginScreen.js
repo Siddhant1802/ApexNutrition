@@ -1,4 +1,6 @@
 import { showToast } from '../components/Toast';
+import AnimatedBackground from '../components/AnimatedBackground';
+import { validateEmail } from '../utils/validation';
 import React, { useState } from 'react';
 import {
   View,
@@ -20,10 +22,17 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    // 1. Check if fields are filled
     if (!email || !password) {
-  showToast('Please fill in all fields', 'error');
-  return;
-}
+      showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    // 2. Validate email format
+    if (!validateEmail(email)) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -34,21 +43,35 @@ export default function LoginScreen({ navigation }) {
       await AsyncStorage.setItem('token', access_token);
       
       showToast('Logged in successfully!', 'success');
-      // TODO: Navigate to Home screen (we'll add this later)
+      
+      // 4. Navigate to Sport Selection
+      setTimeout(() => {
+        navigation.replace('SportSelection');
+      }, 1500);
+      
     } catch (error) {
       console.error('Login error:', error.response?.data || error.message);
-      showToast(error.response?.data?.detail || 'Invalid credentials', 'error');
+      
+      // 1 & 2. Handle specific errors
+      if (error.response?.status === 401) {
+        showToast('Invalid email or password', 'error');
+      } else if (error.response?.status === 404) {
+        showToast('Account not registered. Please sign up first.', 'error');
+      } else {
+        showToast('Login failed. Please try again.', 'error');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.content}>
+  <KeyboardAvoidingView
+    style={styles.container}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  >
+    <AnimatedBackground variant="blue" />
+    <View style={styles.content}>
         {/* Logo/Title */}
         <View style={styles.header}>
           <Text style={styles.title}>Apex Nutrition</Text>
@@ -86,6 +109,28 @@ export default function LoginScreen({ navigation }) {
             ) : (
               <Text style={styles.buttonText}>Login</Text>
             )}
+          </TouchableOpacity>
+
+          {/* Social Login Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Social Login Buttons */}
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => showToast('Google login coming soon!', 'info')}
+          >
+            <Text style={styles.socialButtonText}>🔍 Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => showToast('Apple login coming soon!', 'info')}
+          >
+            <Text style={styles.socialButtonText}>🍎 Continue with Apple</Text>
           </TouchableOpacity>
 
           {/* Register Link */}
@@ -152,6 +197,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: FONTS.sizes.md,
     fontWeight: '600',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    marginHorizontal: SPACING.md,
+    color: COLORS.textSecondary,
+    fontSize: FONTS.sizes.sm,
+  },
+  socialButton: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  socialButtonText: {
+    color: COLORS.text,
+    fontSize: FONTS.sizes.md,
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',
