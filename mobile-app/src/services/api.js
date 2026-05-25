@@ -1,9 +1,9 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// IMPORTANT: Replace with your computer's local IP address
-// Find it by running: ipconfig getifaddr en0 (Mac) in terminal
-const API_URL = '10.0.0.91';
+// For web testing: use localhost
+// For mobile testing: use your computer's IP (find with: ipconfig getifaddr en0)
+const API_URL = 'http://localhost:8000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -47,6 +47,14 @@ export const authAPI = {
   },
   
   getCurrentUser: () => api.get('/users/me'),
+};
+
+export const athleteAPI = {
+  createOrUpdateProfile: (profileData) =>
+    api.post('/athlete-profile', profileData),
+  
+  getProfile: () =>
+    api.get('/athlete-profile'),
 };
 
 export default api;

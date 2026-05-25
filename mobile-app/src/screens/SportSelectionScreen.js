@@ -24,11 +24,16 @@ export default function SportSelectionScreen({ navigation }) {
 };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Sport</Text>
-        <Text style={styles.subtitle}>Select your primary sport</Text>
-      </View>
+            <View style={styles.container}>
+            <View style={styles.header}>
+            <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()} >
+            <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>Choose Your Sport</Text>
+            <Text style={styles.subtitle}>Select your primary sport</Text>
+        </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
         {categories.map((category) => (
@@ -144,4 +149,14 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
   },
+
+
+  backButton: {
+  marginBottom: SPACING.sm,
+},
+backButtonText: {
+  fontSize: FONTS.sizes.md,
+  color: COLORS.primary,
+  fontWeight: '600',
+},
 });

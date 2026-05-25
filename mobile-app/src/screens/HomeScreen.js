@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -25,14 +26,24 @@ export default function HomeScreen({ route }) {
     return Math.min((current / target) * 100, 100);
   };
 
+  const handleSignOut = async () => {
+  await AsyncStorage.removeItem('token');
+  navigation.replace('Login');
+};
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>Good Morning!</Text>
-          <Text style={styles.sport}>{sport.icon} {sport.name}</Text>
-        </View>
+  <View>
+    <Text style={styles.greeting}>Good Morning!</Text>
+    <Text style={styles.sport}>{sport.icon} {sport.name}</Text>
+  </View>
+  <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+    <Text style={styles.signOutText}>Sign Out</Text>
+  </TouchableOpacity>
+</View>
 
         {/* Training Day Toggle */}
         <View style={styles.toggleContainer}>
@@ -189,9 +200,25 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   header: {
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.lg,
-  },
+  marginTop: SPACING.xl,
+  marginBottom: SPACING.lg,
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+},
+signOutButton: {
+  backgroundColor: COLORS.surface,
+  paddingHorizontal: SPACING.md,
+  paddingVertical: SPACING.sm,
+  borderRadius: BORDER_RADIUS.md,
+  borderWidth: 1,
+  borderColor: COLORS.border,
+},
+signOutText: {
+  fontSize: FONTS.sizes.sm,
+  color: COLORS.primary,
+  fontWeight: '600',
+},
   greeting: {
     fontSize: FONTS.sizes.xxl,
     fontWeight: 'bold',

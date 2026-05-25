@@ -11,6 +11,7 @@ import { showToast } from '../components/Toast';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { TRAINING_PHASES } from '../constants/sports';
 import { calculateMacros } from '../utils/macroCalculator';
+import { athleteAPI } from '../services/api';
 
 export default function BodyMetricsScreen({ route, navigation }) {
   const { sport } = route.params;
@@ -31,7 +32,7 @@ export default function BodyMetricsScreen({ route, navigation }) {
     { id: 'extreme', name: 'Very Active (2x/day)', multiplier: 1.9 },
   ];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Validation
     if (!weight || !height || !age) {
       showToast('Please fill in all required fields', 'error');
@@ -58,14 +59,49 @@ export default function BodyMetricsScreen({ route, navigation }) {
     const macros = calculateMacros(athleteData, sport);
 
     console.log('Calculated Macros:', macros);
-    showToast('Macros calculated successfully!', 'success');
 
-// Navigate to Home Dashboard
-setTimeout(() => {
-  navigation.replace('Home', { athleteData, macros, sport });
-}, 1500);
+    // Prepare data for backend
+    const profileData = {
+      sport: sport.id,
+      weight: athleteData.weight,
+      height: athleteData.height,
+      age: athleteData.age,
+      gender: athleteData.gender,
+      body_fat: athleteData.bodyFat,
+      activity_level: athleteData.activityLevel,
+      training_phase: athleteData.trainingPhase,
+      bmr: macros.bmr,
+      tdee: macros.tdee,
+      training_day_calories: macros.trainingDay.calories,
+      training_day_protein: macros.trainingDay.protein,
+      training_day_carbs: macros.trainingDay.carbs,
+      training_day_fat: macros.trainingDay.fat,
+      rest_day_calories: macros.restDay.calories,
+      rest_day_protein: macros.restDay.protein,
+      rest_day_carbs: macros.restDay.carbs,
+      rest_day_fat: macros.restDay.fat,
+      macro_ratio_protein: macros.macroRatios.protein,
+      macro_ratio_carbs: macros.macroRatios.carbs,
+      macro_ratio_fat: macros.macroRatios.fat,
+    };
 
-  
+    try {
+      // Save to backend
+      await athleteAPI.createOrUpdateProfile(profileData);
+      
+      showToast('Profile saved successfully!', 'success');
+
+      // Navigate to Home Dashboard
+      setTimeout(() => {
+        navigation.replace('Home', { 
+          screen: 'HomeTab',
+          params: { athleteData, macros, sport }
+        });
+      }, 1500);
+    } catch (error) {
+      console.error('Save profile error:', error.response?.data || error.message);
+      showToast('Could not save profile. Check console.', 'error');
+    }
   };
 
   return (
@@ -73,6 +109,12 @@ setTimeout(() => {
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
           <Text style={styles.title}>Your Body Metrics</Text>
           <Text style={styles.subtitle}>
             Selected Sport: {sport.icon} {sport.name}
@@ -303,6 +345,14 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: FONTS.sizes.md,
+    fontWeight: '600',
+  },
+  backButton: {
+    marginBottom: SPACING.sm,
+  },
+  backButtonText: {
+    fontSize: FONTS.sizes.md,
+    color: COLORS.primary,
     fontWeight: '600',
   },
 });
