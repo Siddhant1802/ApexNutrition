@@ -13,7 +13,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI } from '../services/api';
+import { authAPI, athleteAPI } from '../services/api';
+import { SPORTS } from '../constants/sports';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 export default function LoginScreen({ navigation }) {
@@ -44,19 +45,71 @@ export default function LoginScreen({ navigation }) {
       
       showToast('Logged in successfully!', 'success');
       
-      // 4. Navigate to Sport Selection
-      setTimeout(() => {
-        navigation.replace('SportSelection');
+      // Check if user has a profile
+      setTimeout(async () => {
+        try {
+          // Try to fetch profile
+          const profileResponse = await athleteAPI.getProfile();
+          const profile = profileResponse.data;
+
+          // Profile exists - load data and go to Home
+          const sport = SPORTS.find(s => s.id === profile.primary_sport);
+
+          const athleteData = {
+            weight: profile.weight_kg,
+            height: profile.height_cm,
+            age: profile.age,
+            gender: profile.gender,
+            bodyFat: null,
+            activityLevel: 'moderate',
+            trainingPhase: profile.training_phase,
+          };
+
+          const macros = {
+            bmr: profile.bmr,
+            tdee: profile.tdee,
+            trainingDay: {
+              calories: profile.training_day_calories,
+              protein: profile.training_day_protein_g,
+              carbs: profile.training_day_carbs_g,
+              fat: profile.training_day_fat_g,
+            },
+            restDay: {
+              calories: profile.rest_day_calories,
+              protein: profile.rest_day_protein_g,
+              carbs: profile.rest_day_carbs_g,
+              fat: profile.rest_day_fat_g,
+            },
+            macroRatios: sport?.macroRatio || { protein: 20, carbs: 55, fat: 25 },
+          };
+
+          // Navigate to Home with data
+          navigation.replace('Home', {
+            screen: 'HomeTab',
+            params: { athleteData, macros, sport: sport || { id: profile.primary_sport, name: profile.primary_sport, icon: '🏃' } }
+          });
+
+        } catch (error) {
+          // No profile found - go to Sport Selection
+          if (error.response?.status === 404) {
+            navigation.replace('SportSelection');
+          } else {
+            // Other error - still go to Sport Selection
+            navigation.replace('SportSelection');
+          }
+        }
       }, 1500);
       
     } catch (error) {
       console.error('Login error:', error.response?.data || error.message);
       
-      // 1 & 2. Handle specific errors
+      // Handle specific errors
       if (error.response?.status === 401) {
         showToast('Invalid email or password', 'error');
       } else if (error.response?.status === 404) {
         showToast('Account not registered. Please sign up first.', 'error');
+      } else if (error.message === 'Network Error') {
+        showToast('Cannot connect to server. Is backend running?', 'error');
       } else {
         showToast('Login failed. Please try again.', 'error');
       }
@@ -66,12 +119,12 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-  <KeyboardAvoidingView
-    style={styles.container}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  >
-    <AnimatedBackground variant="blue" />
-    <View style={styles.content}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <AnimatedBackground variant="blue" />
+      <View style={styles.content}>
         {/* Logo/Title */}
         <View style={styles.header}>
           <Text style={styles.title}>Apex Nutrition</Text>

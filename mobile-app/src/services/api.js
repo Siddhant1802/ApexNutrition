@@ -57,4 +57,20 @@ export const athleteAPI = {
     api.get('/athlete-profile'),
 };
 
+
+// Meals API
+export const mealsAPI = {
+  // Save a meal
+  create: (mealData) => api.post('/meals', mealData),
+  
+  // Get today's meals
+  getToday: () => api.get('/meals/today'),
+  
+  // Delete a meal
+  delete: (mealId) => api.delete(`/meals/${mealId}`),
+  
+  // Get meals by date
+  getByDate: (date) => api.get(`/meals/date/${date}`),
+};
+
 export default api;

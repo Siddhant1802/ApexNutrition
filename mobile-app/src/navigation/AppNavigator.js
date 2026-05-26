@@ -10,6 +10,7 @@ import HomeScreen from '../screens/HomeScreen';
 import ProgressScreen from '../screens/ProgressScreen';
 import AddMealScreen from '../screens/AddMealScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import SplashScreen from '../screens/SplashScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -74,16 +75,18 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Login"
+        initialRouteName="Splash"
         screenOptions={{
           headerShown: false,
         }}
       >
+        <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="SportSelection" component={SportSelectionScreen} />
         <Stack.Screen name="BodyMetrics" component={BodyMetricsScreen} />
         <Stack.Screen name="Home" component={MainTabs} />
+
       </Stack.Navigator>
     </NavigationContainer>
   );

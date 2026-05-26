@@ -66,3 +66,27 @@ class AthleteProfile(Base):
     
     # Relationship back to user
     user = relationship("User", back_populates="profile")
+
+class Meal(Base):
+    __tablename__ = "meals"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    
+    # Meal details
+    meal_type = Column(String, nullable=False)  # breakfast, lunch, dinner, snacks
+    food_name = Column(String, nullable=False)
+    weight_grams = Column(Float, nullable=False)
+    
+    # Nutrition
+    calories = Column(Integer, nullable=False)
+    protein_g = Column(Integer, nullable=False)
+    carbs_g = Column(Integer, nullable=False)
+    fat_g = Column(Integer, nullable=False)
+    
+    # Metadata
+    date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship
+    user = relationship("User")
