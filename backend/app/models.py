@@ -90,3 +90,15 @@ class Meal(Base):
     
     # Relationship
     user = relationship("User")
+class WaterLog(Base):
+    __tablename__ = "water_logs"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    amount_ml = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User")
+
+    

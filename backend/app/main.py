@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import auth, users, nutrition
-from app.routers import auth, users, nutrition, athlete, food, meals
+from app.routers import auth, users, nutrition, athlete, food, meals, ai, water
 
 
 # Create all database tables
@@ -31,6 +30,8 @@ app.include_router(nutrition.router, prefix="/api/nutrition", tags=["Nutrition"]
 app.include_router(athlete.router, prefix="/api")
 app.include_router(food.router, prefix="/api")
 app.include_router(meals.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
+app.include_router(water.router, prefix="/api")
 
 # Root endpoint
 @app.get("/")

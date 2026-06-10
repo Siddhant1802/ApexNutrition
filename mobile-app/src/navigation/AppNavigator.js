@@ -11,6 +11,7 @@ import ProgressScreen from '../screens/ProgressScreen';
 import AddMealScreen from '../screens/AddMealScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SplashScreen from '../screens/SplashScreen';
+import AICoachScreen from '../screens/AICoachScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -59,6 +60,14 @@ function MainTabs() {
         }}
       />
       <Tab.Screen 
+        name="AICoachTab" 
+        component={AICoachScreen}
+        options={{
+          tabBarLabel: 'AI Coach',
+          tabBarIcon: ({ color }) => <span style={{ fontSize: 24 }}>🤖</span>,
+        }}
+      />
+      <Tab.Screen 
         name="ProfileTab" 
         component={ProfileScreen}
         options={{
@@ -86,12 +95,10 @@ export default function AppNavigator() {
         <Stack.Screen name="SportSelection" component={SportSelectionScreen} />
         <Stack.Screen name="BodyMetrics" component={BodyMetricsScreen} />
         <Stack.Screen name="Home" component={MainTabs} />
-
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
-
 
 
 // import React from 'react';

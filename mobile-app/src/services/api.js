@@ -55,6 +55,7 @@ export const athleteAPI = {
   
   getProfile: () =>
     api.get('/athlete-profile'),
+  updateProfile: (profileData) => api.post('/athlete-profile', profileData),
 };
 
 
@@ -71,6 +72,16 @@ export const mealsAPI = {
   
   // Get meals by date
   getByDate: (date) => api.get(`/meals/date/${date}`),
+
+  getWeeklyProgress: () => api.get('/meals/progress/weekly'), 
+  getLoggedDates: () => api.get('/meals/logged-dates'), 
+};
+
+// Water Tracking API
+export const waterAPI = {
+  log: (amount_ml) => api.post('/water', { amount_ml }),
+  getToday: () => api.get('/water/today'),
+  delete: (logId) => api.delete(`/water/${logId}`),
 };
 
 export default api;
