@@ -12,18 +12,16 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { athleteAPI } from '../services/api';
 import { SPORTS } from '../constants/sports';
-import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { DT } from '../constants/darkTheme';
 
-export default function ProfileScreen({ navigation, route }) {
+export default function ProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [showWeightModal, setShowWeightModal] = useState(false);
-  const [showSportModal, setShowSportModal] = useState(false);
   const [newWeight, setNewWeight] = useState('');
+  const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  useEffect(() => { loadProfile(); }, []);
 
   const loadProfile = async () => {
     try {
@@ -38,15 +36,8 @@ export default function ProfileScreen({ navigation, route }) {
   };
 
   const handleSignOut = async () => {
-    try {
-      await AsyncStorage.removeItem('token');
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
+    await AsyncStorage.removeItem('token');
+    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   const handleUpdateWeight = async () => {
@@ -56,20 +47,8 @@ export default function ProfileScreen({ navigation, route }) {
       return;
     }
 
-    setLoading(true);
+    setUpdating(true);
     try {
-      // Re-calculate macros with new weight
-      const updatedData = {
-        sport: profile.primary_sport,
-        weight: weight,
-        height: profile.height_cm,
-        age: profile.age,
-        gender: profile.gender,
-        activityLevel: 'moderate',
-        trainingPhase: profile.training_phase,
-      };
-
-      // Calculate new macros (simplified - using Mifflin-St Jeor)
       let bmr;
       if (profile.gender === 'male') {
         bmr = Math.round(10 * weight + 6.25 * profile.height_cm - 5 * profile.age + 5);
@@ -77,76 +56,59 @@ export default function ProfileScreen({ navigation, route }) {
         bmr = Math.round(10 * weight + 6.25 * profile.height_cm - 5 * profile.age - 161);
       }
 
-      const activityMultiplier = 1.55; // Moderate activity
-      const tdee = Math.round(bmr * activityMultiplier);
-
-      // Calculate macros (simplified ratios)
+      const tdee = Math.round(bmr * 1.55);
       const trainingCalories = tdee + 200;
       const restCalories = tdee - 200;
-
       const sport = SPORTS.find(s => s.id === profile.primary_sport);
       const macroRatio = sport?.macroRatio || { protein: 20, carbs: 55, fat: 25 };
 
-      // Calculate grams for training day
-      const trainingProtein = Math.round((trainingCalories * (macroRatio.protein / 100)) / 4);
-      const trainingCarbs = Math.round((trainingCalories * (macroRatio.carbs / 100)) / 4);
-      const trainingFat = Math.round((trainingCalories * (macroRatio.fat / 100)) / 9);
-
-      // Calculate grams for rest day
-      const restProtein = Math.round((restCalories * (macroRatio.protein / 100)) / 4);
-      const restCarbs = Math.round((restCalories * (macroRatio.carbs / 100)) / 4);
-      const restFat = Math.round((restCalories * (macroRatio.fat / 100)) / 9);
-
       const updatePayload = {
-  sport: profile.primary_sport,
-  weight: weight,
-  height: profile.height_cm,
-  age: profile.age,
-  gender: profile.gender,
-  body_fat: profile.body_fat || null,  // ADD THIS LINE
-  activity_level: 'moderate',  // CHANGE TO SNAKE_CASE
-  training_phase: profile.training_phase || 'base',  // CHANGE TO SNAKE_CASE
-  bmr: bmr,
-  tdee: tdee,
-  training_day_calories: trainingCalories,
-  training_day_protein: trainingProtein,
-  training_day_carbs: trainingCarbs,
-  training_day_fat: trainingFat,
-  rest_day_calories: restCalories,
-  rest_day_protein: restProtein,
-  rest_day_carbs: restCarbs,
-  rest_day_fat: restFat,
-  macro_ratio_protein: macroRatio.protein,
-  macro_ratio_carbs: macroRatio.carbs,
-  macro_ratio_fat: macroRatio.fat,
-};
-      console.log('Sending payload:', updatePayload);
+        sport: profile.primary_sport,
+        weight,
+        height: profile.height_cm,
+        age: profile.age,
+        gender: profile.gender,
+        body_fat: profile.body_fat || null,
+        activity_level: 'moderate',
+        training_phase: profile.training_phase || 'base',
+        bmr,
+        tdee,
+        training_day_calories: trainingCalories,
+        training_day_protein: Math.round((trainingCalories * (macroRatio.protein / 100)) / 4),
+        training_day_carbs: Math.round((trainingCalories * (macroRatio.carbs / 100)) / 4),
+        training_day_fat: Math.round((trainingCalories * (macroRatio.fat / 100)) / 9),
+        rest_day_calories: restCalories,
+        rest_day_protein: Math.round((restCalories * (macroRatio.protein / 100)) / 4),
+        rest_day_carbs: Math.round((restCalories * (macroRatio.carbs / 100)) / 4),
+        rest_day_fat: Math.round((restCalories * (macroRatio.fat / 100)) / 9),
+        macro_ratio_protein: macroRatio.protein,
+        macro_ratio_carbs: macroRatio.carbs,
+        macro_ratio_fat: macroRatio.fat,
+      };
 
       await athleteAPI.updateProfile(updatePayload);
       await loadProfile();
       setShowWeightModal(false);
-      alert('Weight updated successfully! Macros recalculated.');
     } catch (error) {
-      console.error('Error updating weight:', error);
       alert('Failed to update weight. Please try again.');
     } finally {
-      setLoading(false);
+      setUpdating(false);
     }
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color={DT.lime} />
+        <Text style={styles.loaderText}>Loading profile...</Text>
       </View>
     );
   }
 
   if (!profile) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>Failed to load profile</Text>
+      <View style={styles.loader}>
+        <Text style={styles.loaderText}>Failed to load profile</Text>
       </View>
     );
   }
@@ -154,361 +116,406 @@ export default function ProfileScreen({ navigation, route }) {
   const sport = SPORTS.find(s => s.id === profile.primary_sport);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerMono}>ATHLETE PROFILE</Text>
+          <Text style={styles.headerTitle}>Profile</Text>
+        </View>
+        <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn}>
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
-          <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* Profile Info Card */}
-        <View style={styles.card}>
-          <View style={styles.sportHeader}>
-            <Text style={styles.sportIcon}>{sport?.icon || '🏃'}</Text>
-            <Text style={styles.sportName}>{sport?.name || profile.primary_sport}</Text>
-          </View>
-        </View>
-
-        {/* Body Metrics */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Body Metrics</Text>
-          
-          <View style={styles.metricRow}>
-            <View style={styles.metricLeft}>
-              <Text style={styles.metricLabel}>Weight</Text>
-              <Text style={styles.metricValue}>{profile.weight_kg} kg</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.editButton}
-              onPress={() => setShowWeightModal(true)}
-            >
-              <Text style={styles.editButtonText}>Edit</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.metricRow}>
-            <View style={styles.metricLeft}>
-              <Text style={styles.metricLabel}>Height</Text>
-              <Text style={styles.metricValue}>{profile.height_cm} cm</Text>
-            </View>
-          </View>
-
-          <View style={styles.metricRow}>
-            <View style={styles.metricLeft}>
-              <Text style={styles.metricLabel}>Age</Text>
-              <Text style={styles.metricValue}>{profile.age} years</Text>
-            </View>
-          </View>
-
-          <View style={styles.metricRow}>
-            <View style={styles.metricLeft}>
-              <Text style={styles.metricLabel}>Gender</Text>
-              <Text style={styles.metricValue}>
-                {profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1)}
+        {/* SPORT CARD */}
+        <View style={styles.sportCard}>
+          <Text style={styles.sportCardIcon}>{sport?.icon || '🏃'}</Text>
+          <View style={styles.sportCardInfo}>
+            <Text style={styles.sportCardLabel}>PRIMARY SPORT</Text>
+            <Text style={styles.sportCardName}>{sport?.name || profile.primary_sport}</Text>
+            <View style={styles.sportCardPhaseBadge}>
+              <Text style={styles.sportCardPhaseText}>
+                {profile.training_phase?.replace('_', ' ').toUpperCase() || 'BASE'} PHASE
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Nutrition Targets */}
+        {/* BODY METRICS CARD */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Nutrition Targets</Text>
-          
-          <View style={styles.targetSection}>
-            <Text style={styles.targetLabel}>Training Day</Text>
-            <Text style={styles.targetCalories}>{profile.training_day_calories} cal</Text>
-            <Text style={styles.targetMacros}>
-              P: {profile.training_day_protein_g}g | C: {profile.training_day_carbs_g}g | F: {profile.training_day_fat_g}g
-            </Text>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIconBadge}>
+              <Text>📏</Text>
+            </View>
+            <Text style={styles.cardTitle}>Body Metrics</Text>
           </View>
 
-          <View style={styles.divider} />
-
-          <View style={styles.targetSection}>
-            <Text style={styles.targetLabel}>Rest Day</Text>
-            <Text style={styles.targetCalories}>{profile.rest_day_calories} cal</Text>
-            <Text style={styles.targetMacros}>
-              P: {profile.rest_day_protein_g}g | C: {profile.rest_day_carbs_g}g | F: {profile.rest_day_fat_g}g
-            </Text>
-          </View>
-        </View>
-
-        {/* Stats */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your Stats</Text>
-          
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>BMR (Basal Metabolic Rate)</Text>
-            <Text style={styles.statValue}>{profile.bmr} cal/day</Text>
-          </View>
-
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>TDEE (Total Daily Energy)</Text>
-            <Text style={styles.statValue}>{profile.tdee} cal/day</Text>
-          </View>
-
-          <View style={styles.statRow}>
-            <Text style={styles.statLabel}>Training Phase</Text>
-            <Text style={styles.statValue}>
-              {profile.training_phase?.replace('_', ' ').toUpperCase()}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Weight Edit Modal */}
-      <Modal
-        visible={showWeightModal}
-        animationType="slide"
-        transparent={true}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Update Weight</Text>
-              <TouchableOpacity onPress={() => setShowWeightModal(false)}>
-                <Text style={styles.closeButton}>✕</Text>
+          <View style={styles.metricsGrid}>
+            {/* Weight - editable */}
+            <View style={[styles.metricItem, styles.metricItemFull]}>
+              <View style={styles.metricItemLeft}>
+                <Text style={styles.metricLabel}>WEIGHT</Text>
+                <View style={styles.metricValueRow}>
+                  <Text style={styles.metricValue}>{profile.weight_kg}</Text>
+                  <Text style={styles.metricUnit}>kg</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => setShowWeightModal(true)}
+              >
+                <Text style={styles.editBtnText}>Edit →</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>New Weight (kg)</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="70"
-              placeholderTextColor={COLORS.textSecondary}
-              value={newWeight}
-              onChangeText={setNewWeight}
-              keyboardType="numeric"
-            />
+            {/* Height */}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>HEIGHT</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>{profile.height_cm}</Text>
+                <Text style={styles.metricUnit}>cm</Text>
+              </View>
+            </View>
 
-            <Text style={styles.modalNote}>
-              💡 Updating your weight will recalculate your macros
-            </Text>
+            {/* Age */}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>AGE</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>{profile.age}</Text>
+                <Text style={styles.metricUnit}>yrs</Text>
+              </View>
+            </View>
+
+            {/* Gender */}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>GENDER</Text>
+              <Text style={styles.metricValue}>
+                {profile.gender?.charAt(0).toUpperCase() + profile.gender?.slice(1)}
+              </Text>
+            </View>
+
+            {/* Body Fat */}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>BODY FAT</Text>
+              <View style={styles.metricValueRow}>
+                <Text style={styles.metricValue}>{profile.body_fat || '--'}</Text>
+                {profile.body_fat && <Text style={styles.metricUnit}>%</Text>}
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* STATS CARD */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIconBadge}>
+              <Text>⚡</Text>
+            </View>
+            <Text style={styles.cardTitle}>Energy Stats</Text>
+          </View>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>BMR</Text>
+              <Text style={[styles.statValue, { color: DT.carb }]}>{profile.bmr}</Text>
+              <Text style={styles.statUnit}>kcal/day</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>TDEE</Text>
+              <Text style={[styles.statValue, { color: DT.lime }]}>{profile.tdee}</Text>
+              <Text style={styles.statUnit}>kcal/day</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* NUTRITION TARGETS CARD */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIconBadge}>
+              <Text>🎯</Text>
+            </View>
+            <Text style={styles.cardTitle}>Nutrition Targets</Text>
+          </View>
+
+          {/* Training Day */}
+          <View style={styles.targetCard}>
+            <View style={styles.targetCardHeader}>
+              <Text style={styles.targetCardLabel}>🏋️ Training Day</Text>
+              <Text style={[styles.targetCardCal, { color: DT.lime }]}>
+                {profile.training_day_calories} kcal
+              </Text>
+            </View>
+            <View style={styles.targetMacros}>
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.protein }]}>
+                  {profile.training_day_protein_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Protein</Text>
+              </View>
+              <View style={styles.targetMacroDivider} />
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.carb }]}>
+                  {profile.training_day_carbs_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Carbs</Text>
+              </View>
+              <View style={styles.targetMacroDivider} />
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.fat }]}>
+                  {profile.training_day_fat_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Fat</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Rest Day */}
+          <View style={[styles.targetCard, { marginTop: 10 }]}>
+            <View style={styles.targetCardHeader}>
+              <Text style={styles.targetCardLabel}>😴 Rest Day</Text>
+              <Text style={[styles.targetCardCal, { color: DT.fat }]}>
+                {profile.rest_day_calories} kcal
+              </Text>
+            </View>
+            <View style={styles.targetMacros}>
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.protein }]}>
+                  {profile.rest_day_protein_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Protein</Text>
+              </View>
+              <View style={styles.targetMacroDivider} />
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.carb }]}>
+                  {profile.rest_day_carbs_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Carbs</Text>
+              </View>
+              <View style={styles.targetMacroDivider} />
+              <View style={styles.targetMacroItem}>
+                <Text style={[styles.targetMacroVal, { color: DT.fat }]}>
+                  {profile.rest_day_fat_g}g
+                </Text>
+                <Text style={styles.targetMacroLabel}>Fat</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* SIGN OUT BUTTON */}
+        <TouchableOpacity style={styles.signOutFullBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutFullBtnText}>Sign Out</Text>
+        </TouchableOpacity>
+
+      </View>
+
+      {/* WEIGHT UPDATE MODAL */}
+      <Modal visible={showWeightModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Update Weight</Text>
+              <TouchableOpacity onPress={() => setShowWeightModal(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>NEW WEIGHT</Text>
+            <View style={styles.modalInputRow}>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="70"
+                placeholderTextColor={DT.textTert}
+                value={newWeight}
+                onChangeText={setNewWeight}
+                keyboardType="numeric"
+                autoFocus
+              />
+              <View style={styles.modalInputUnit}>
+                <Text style={styles.modalInputUnitText}>kg</Text>
+              </View>
+            </View>
+
+            <View style={styles.modalNote}>
+              <Text style={styles.modalNoteIcon}>💡</Text>
+              <Text style={styles.modalNoteText}>
+                Updating weight will automatically recalculate your BMR, TDEE and macro targets
+              </Text>
+            </View>
 
             <TouchableOpacity
-              style={styles.saveButton}
+              style={[styles.modalSaveBtn, updating && { opacity: 0.6 }]}
               onPress={handleUpdateWeight}
+              disabled={updating}
             >
-              <Text style={styles.saveButtonText}>Update & Recalculate</Text>
+              {updating ? (
+                <ActivityIndicator color={DT.bg} size="small" />
+              ) : (
+                <Text style={styles.modalSaveBtnText}>Update & Recalculate →</Text>
+              )}
             </TouchableOpacity>
+
           </View>
         </View>
       </Modal>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: SPACING.md,
-    fontSize: FONTS.sizes.md,
-    color: COLORS.textSecondary,
-  },
-  errorText: {
-    fontSize: FONTS.sizes.md,
-    color: COLORS.textSecondary,
-  },
-  content: {
-    padding: SPACING.lg,
-  },
+  container: { flex: 1, backgroundColor: DT.bg },
+  loader: { flex: 1, backgroundColor: DT.bg, justifyContent: 'center', alignItems: 'center' },
+  loaderText: { color: DT.textSec, marginTop: 12, fontSize: 14 },
+
+  // HEADER
   header: {
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20,
+    borderBottomWidth: 1, borderBottomColor: DT.border,
   },
-  title: {
-    fontSize: FONTS.sizes.xxl,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  headerMono: { fontSize: 10, color: DT.lime, fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: DT.text, letterSpacing: -0.5 },
+  signOutBtn: {
+    borderWidth: 1, borderColor: DT.border,
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
   },
-  signOutButton: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  signOutText: { fontSize: 13, color: DT.textSec, fontWeight: '500' },
+
+  content: { paddingHorizontal: 16, paddingTop: 16 },
+
+  // SPORT CARD
+  sportCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    backgroundColor: DT.card, borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: 'rgba(203,255,71,0.2)',
+    marginBottom: 12,
   },
-  signOutText: {
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.primary,
-    fontWeight: '600',
+  sportCardIcon: { fontSize: 52 },
+  sportCardInfo: { flex: 1 },
+  sportCardLabel: { fontSize: 9, color: DT.textSec, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
+  sportCardName: { fontSize: 20, fontWeight: '800', color: DT.text, letterSpacing: -0.3, marginBottom: 8 },
+  sportCardPhaseBadge: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: DT.limeDim, borderWidth: 1,
+    borderColor: 'rgba(203,255,71,0.3)', alignSelf: 'flex-start',
   },
+  sportCardPhaseText: { fontSize: 10, color: DT.lime, fontWeight: '700', letterSpacing: 1 },
+
+  // CARD
   card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: DT.card, borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: DT.border, marginBottom: 12,
   },
-  sportHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  cardIconBadge: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: DT.limeDim, justifyContent: 'center', alignItems: 'center',
   },
-  sportIcon: {
-    fontSize: 48,
-    marginRight: SPACING.md,
+  cardTitle: { fontSize: 16, fontWeight: '700', color: DT.text },
+
+  // METRICS GRID
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  metricItem: {
+    width: '47%', backgroundColor: DT.cardAlt,
+    borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: DT.border,
   },
-  sportName: {
-    fontSize: FONTS.sizes.xl,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  metricItemFull: {
+    width: '100%', flexDirection: 'row',
+    justifyContent: 'space-between', alignItems: 'center',
   },
-  cardTitle: {
-    fontSize: FONTS.sizes.lg,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.md,
+  metricItemLeft: {},
+  metricLabel: { fontSize: 9, color: DT.textSec, fontWeight: '700', letterSpacing: 1.5, marginBottom: 6 },
+  metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  metricValue: { fontSize: 22, fontWeight: '800', color: DT.text, letterSpacing: -0.5 },
+  metricUnit: { fontSize: 13, color: DT.textSec, fontWeight: '500' },
+  editBtn: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: DT.limeDim, borderWidth: 1,
+    borderColor: 'rgba(203,255,71,0.3)',
   },
-  metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+  editBtnText: { fontSize: 13, color: DT.lime, fontWeight: '700' },
+
+  // STATS
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
+  statItem: { alignItems: 'center', flex: 1 },
+  statLabel: { fontSize: 9, color: DT.textSec, fontWeight: '700', letterSpacing: 1.5, marginBottom: 6 },
+  statValue: { fontSize: 28, fontWeight: '800', letterSpacing: -1 },
+  statUnit: { fontSize: 11, color: DT.textTert, marginTop: 2 },
+  statDivider: { width: 1, height: 40, backgroundColor: DT.border },
+
+  // TARGETS
+  targetCard: {
+    backgroundColor: DT.cardAlt, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: DT.border,
   },
-  metricLeft: {
-    flex: 1,
+  targetCardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
   },
-  metricLabel: {
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.textSecondary,
+  targetCardLabel: { fontSize: 14, fontWeight: '700', color: DT.text },
+  targetCardCal: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
+  targetMacros: { flexDirection: 'row', justifyContent: 'space-around' },
+  targetMacroItem: { alignItems: 'center' },
+  targetMacroVal: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  targetMacroLabel: { fontSize: 10, color: DT.textSec, marginTop: 3 },
+  targetMacroDivider: { width: 1, backgroundColor: DT.border },
+
+  // SIGN OUT BUTTON
+  signOutFullBtn: {
+    borderWidth: 1, borderColor: DT.danger + '40',
+    backgroundColor: 'rgba(224,90,90,0.06)',
+    borderRadius: 12, padding: 16, alignItems: 'center',
+    marginTop: 4, marginBottom: 16,
   },
-  metricValue: {
-    fontSize: FONTS.sizes.lg,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginTop: SPACING.xs,
-  },
-  editButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  editButtonText: {
-    color: '#FFFFFF',
-    fontSize: FONTS.sizes.sm,
-    fontWeight: '600',
-  },
-  targetSection: {
-    paddingVertical: SPACING.sm,
-  },
-  targetLabel: {
-    fontSize: FONTS.sizes.md,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  targetCalories: {
-    fontSize: FONTS.sizes.xl,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-  targetMacros: {
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.textSecondary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.md,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  statLabel: {
-    fontSize: FONTS.sizes.md,
-    color: COLORS.textSecondary,
-  },
-  statValue: {
-    fontSize: FONTS.sizes.md,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
+  signOutFullBtnText: { fontSize: 15, color: DT.danger, fontWeight: '700' },
+
+  // MODAL
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
   },
-  modalContainer: {
-    backgroundColor: COLORS.background,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    width: '85%',
-    maxWidth: 400,
+  modalCard: {
+    backgroundColor: DT.card, borderTopLeftRadius: 24,
+    borderTopRightRadius: 24, padding: 24,
+    borderWidth: 1, borderColor: DT.border,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 24,
   },
-  modalTitle: {
-    fontSize: FONTS.sizes.xl,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  closeButton: {
-    fontSize: FONTS.sizes.xxl,
-    color: COLORS.textSecondary,
-  },
-  modalLabel: {
-    fontSize: FONTS.sizes.md,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: DT.text },
+  modalClose: { fontSize: 20, color: DT.textSec },
+  modalLabel: { fontSize: 9, color: DT.textSec, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
+  modalInputRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   modalInput: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: FONTS.sizes.lg,
-    color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: SPACING.md,
+    flex: 1, backgroundColor: DT.cardAlt, borderRadius: 12,
+    padding: 16, fontSize: 24, color: DT.text,
+    borderWidth: 1, borderColor: DT.border, fontWeight: '700',
   },
+  modalInputUnit: {
+    width: 56, backgroundColor: DT.cardAlt, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: DT.border,
+  },
+  modalInputUnitText: { fontSize: 14, color: DT.textSec, fontWeight: '600' },
   modalNote: {
-    fontSize: FONTS.sizes.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
-    fontStyle: 'italic',
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: DT.bg, borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: DT.border, marginBottom: 20,
   },
-  saveButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    alignItems: 'center',
+  modalNoteIcon: { fontSize: 14 },
+  modalNoteText: { flex: 1, fontSize: 13, color: DT.textSec, lineHeight: 18 },
+  modalSaveBtn: {
+    backgroundColor: DT.lime, borderRadius: 12,
+    height: 52, alignItems: 'center', justifyContent: 'center',
   },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: FONTS.sizes.md,
-    fontWeight: '600',
-  },
+  modalSaveBtnText: { fontSize: 15, fontWeight: '800', color: DT.bg },
 });

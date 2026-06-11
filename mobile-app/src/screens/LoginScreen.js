@@ -1,13 +1,13 @@
 import { showToast } from '../components/Toast';
-import AnimatedBackground from '../components/AnimatedBackground';
 import { validateEmail } from '../utils/validation';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -15,44 +15,38 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI, athleteAPI } from '../services/api';
 import { SPORTS } from '../constants/sports';
-import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { DT } from '../constants/darkTheme';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleLogin = async () => {
-    // 1. Check if fields are filled
-    if (!email || !password) {
-      showToast('Please fill in all fields', 'error');
+    if (!email.trim() || !password.trim()) {
+      setError('Please fill in all fields');
       return;
     }
-
-    // 2. Validate email format
     if (!validateEmail(email)) {
-      showToast('Please enter a valid email address', 'error');
+      setError('Please enter a valid email address');
       return;
     }
 
     setLoading(true);
+    setError(null);
+
     try {
       const response = await authAPI.login(email, password);
       const { access_token } = response.data;
-      
-      // Save token
       await AsyncStorage.setItem('token', access_token);
-      
       showToast('Logged in successfully!', 'success');
-      
-      // Check if user has a profile
+
       setTimeout(async () => {
         try {
-          // Try to fetch profile
           const profileResponse = await athleteAPI.getProfile();
           const profile = profileResponse.data;
-
-          // Profile exists - load data and go to Home
           const sport = SPORTS.find(s => s.id === profile.primary_sport);
 
           const athleteData = {
@@ -83,35 +77,28 @@ export default function LoginScreen({ navigation }) {
             macroRatios: sport?.macroRatio || { protein: 20, carbs: 55, fat: 25 },
           };
 
-          // Navigate to Home with data
           navigation.replace('Home', {
             screen: 'HomeTab',
-            params: { athleteData, macros, sport: sport || { id: profile.primary_sport, name: profile.primary_sport, icon: '🏃' } }
+            params: {
+              athleteData,
+              macros,
+              sport: sport || { id: profile.primary_sport, name: profile.primary_sport, icon: '🏃' }
+            }
           });
-
         } catch (error) {
-          // No profile found - go to Sport Selection
-          if (error.response?.status === 404) {
-            navigation.replace('SportSelection');
-          } else {
-            // Other error - still go to Sport Selection
-            navigation.replace('SportSelection');
-          }
+          navigation.replace('SportSelection');
         }
       }, 1500);
-      
+
     } catch (error) {
-      console.error('Login error:', error.response?.data || error.message);
-      
-      // Handle specific errors
       if (error.response?.status === 401) {
-        showToast('Invalid email or password', 'error');
+        setError('Invalid email or password');
       } else if (error.response?.status === 404) {
-        showToast('Account not registered. Please sign up first.', 'error');
+        setError('Account not found. Please sign up.');
       } else if (error.message === 'Network Error') {
-        showToast('Cannot connect to server. Is backend running?', 'error');
+        setError('Cannot connect to server. Is backend running?');
       } else {
-        showToast('Login failed. Please try again.', 'error');
+        setError('Login failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -119,179 +106,323 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <AnimatedBackground variant="blue" />
-      <View style={styles.content}>
-        {/* Logo/Title */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Apex Nutrition</Text>
-          <Text style={styles.subtitle}>Elite Athlete Nutrition</Text>
-        </View>
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
 
-        {/* Login Form */}
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={COLORS.textSecondary}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+          {/* HEADER SECTION */}
+          <View style={styles.headerSection}>
+            <View style={styles.logoContainer}>
+              <Text style={styles.logoText}>⚡</Text>
+            </View>
+            <Text style={styles.title}>APEX NUTRITION</Text>
+            <Text style={styles.subtitle}>
+              AI-powered sport nutrition for competitive athletes
+            </Text>
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={COLORS.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          {/* LOGIN CARD */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Welcome Back</Text>
+            <Text style={styles.cardSubtitle}>
+              Sign in to continue your nutrition journey
+            </Text>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Login</Text>
+            {/* ERROR MESSAGE */}
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             )}
-          </TouchableOpacity>
 
-          {/* Social Login Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
+            {/* EMAIL INPUT */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>EMAIL</Text>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputIcon}>✉️</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="your@email.com"
+                  placeholderTextColor={DT.textTert}
+                  value={email}
+                  onChangeText={(t) => { setEmail(t); setError(null); }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                />
+              </View>
+            </View>
 
-          {/* Social Login Buttons */}
-          <TouchableOpacity 
-            style={styles.socialButton}
-            onPress={() => showToast('Google login coming soon!', 'info')}
-          >
-            <Text style={styles.socialButtonText}>🔍 Continue with Google</Text>
-          </TouchableOpacity>
+            {/* PASSWORD INPUT */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>PASSWORD</Text>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputIcon}>🔒</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  placeholderTextColor={DT.textTert}
+                  value={password}
+                  onChangeText={(t) => { setPassword(t); setError(null); }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-          <TouchableOpacity 
-            style={styles.socialButton}
-            onPress={() => showToast('Apple login coming soon!', 'info')}
-          >
-            <Text style={styles.socialButtonText}>🍎 Continue with Apple</Text>
-          </TouchableOpacity>
-
-          {/* Register Link */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.link}>Sign Up</Text>
+            {/* LOGIN BUTTON */}
+            <TouchableOpacity
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color={DT.bg} size="small" />
+              ) : (
+                <Text style={styles.loginButtonText}>SIGN IN →</Text>
+              )}
             </TouchableOpacity>
+
+            {/* DIVIDER */}
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.divider} />
+            </View>
+
+            {/* REGISTER LINK */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Don't have an account?</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.registerLink}> Create one</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+
+          {/* BOTTOM SECTION */}
+          <View style={styles.bottomSection}>
+            <Text style={styles.termsText}>
+              By signing in, you agree to our{' '}
+              <Text style={styles.termsLink}>Terms of Service</Text>
+              {' '}and{' '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: DT.bg,
   },
-  content: {
+  keyboardView: {
     flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
   },
-  header: {
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 80,
+    paddingBottom: 40,
+  },
+
+  // HEADER
+  headerSection: {
     alignItems: 'center',
-    marginBottom: SPACING.xl * 2,
+    marginBottom: 40,
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: DT.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: DT.limeDim,
+  },
+  logoText: {
+    fontSize: 32,
   },
   title: {
-    fontSize: FONTS.sizes.xxl,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
+    fontSize: 28,
+    fontWeight: '800',
+    color: DT.text,
+    letterSpacing: 3,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: FONTS.sizes.md,
-    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+    color: DT.textSec,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    lineHeight: 20,
   },
-  form: {
-    width: '100%',
+
+  // CARD
+  card: {
+    backgroundColor: DT.card,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: DT.border,
+  },
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: DT.text,
+    marginBottom: 8,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: DT.textSec,
+    marginBottom: 24,
+  },
+
+  // ERROR
+  errorContainer: {
+    backgroundColor: 'rgba(224, 90, 90, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: DT.danger,
+  },
+  errorText: {
+    color: DT.danger,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+
+  // INPUTS
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: DT.textSec,
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: DT.cardAlt,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DT.border,
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  inputIcon: {
+    fontSize: 16,
+    marginRight: 12,
   },
   input: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: FONTS.sizes.md,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    flex: 1,
+    color: DT.text,
+    fontSize: 15,
+    fontWeight: '500',
+    paddingVertical: 0,
   },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
+  eyeButton: {
+    padding: 4,
+  },
+  eyeIcon: {
+    fontSize: 16,
+  },
+
+  // LOGIN BUTTON
+  loginButton: {
+    backgroundColor: DT.lime,
+    borderRadius: 12,
+    height: 52,
     alignItems: 'center',
-    marginTop: SPACING.md,
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: FONTS.sizes.md,
-    fontWeight: '600',
+  loginButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: DT.bg,
+    letterSpacing: 1,
+  },
+
+  // DIVIDER
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: SPACING.lg,
-  },
-  dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: DT.border,
   },
   dividerText: {
-    marginHorizontal: SPACING.md,
-    color: COLORS.textSecondary,
-    fontSize: FONTS.sizes.sm,
+    fontSize: 12,
+    fontWeight: '600',
+    color: DT.textTert,
+    marginHorizontal: 16,
+    letterSpacing: 1,
   },
-  socialButton: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  socialButtonText: {
-    color: COLORS.text,
-    fontSize: FONTS.sizes.md,
-    fontWeight: '500',
-  },
-  footer: {
+
+  // REGISTER
+  registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: SPACING.lg,
   },
-  footerText: {
-    color: COLORS.textSecondary,
-    fontSize: FONTS.sizes.sm,
+  registerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: DT.textSec,
   },
-  link: {
-    color: COLORS.primary,
-    fontSize: FONTS.sizes.sm,
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DT.lime,
+  },
+
+  // BOTTOM
+  bottomSection: {
+    marginTop: 32,
+    alignItems: 'center',
+  },
+  termsText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: DT.textTert,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: DT.textSec,
     fontWeight: '600',
   },
 });
