@@ -76,12 +76,15 @@ export const mealsAPI = {
   getWeeklyProgress: () => api.get('/meals/progress/weekly'), 
   getLoggedDates: () => api.get('/meals/logged-dates'), 
 };
-
+// AI Features API
+export const aiAPI = {
+  preWorkout: (data) => api.post('/ai/pre-workout', data),
+  recovery: (data) => api.post('/ai/recovery', data),
+};
 // Water Tracking API
 export const waterAPI = {
   log: (amount_ml) => api.post('/water', { amount_ml }),
   getToday: () => api.get('/water/today'),
   delete: (logId) => api.delete(`/water/${logId}`),
 };
-
 export default api;

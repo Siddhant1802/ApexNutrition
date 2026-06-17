@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { mealsAPI, waterAPI } from '../services/api';
+import { mealsAPI, waterAPI, aiAPI } from '../services/api';
 import FoodSearchModal from '../components/FoodSearchModal';
 import Svg, { Circle } from 'react-native-svg';
 import {
@@ -14,6 +14,8 @@ import {
   ImageBackground,
   Animated,
   Easing,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { DT } from '../constants/darkTheme';
 
@@ -170,25 +172,30 @@ async function updateStreak(hasMealsToday) {
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
   if (data.lastDate === today) {
-    // already updated today - just return current
     return data.count;
   }
 
   let newCount;
   if (!data.lastDate) {
-    // First time ever
     newCount = hasMealsToday ? 1 : 0;
   } else if (data.lastDate === yesterday) {
-    // Consecutive day
     newCount = hasMealsToday ? data.count + 1 : 0;
   } else {
-    // Streak broken (missed a day)
     newCount = hasMealsToday ? 1 : 0;
   }
 
   const newData = { count: newCount, lastDate: hasMealsToday ? today : data.lastDate };
   await AsyncStorage.setItem(STREAK_KEY, JSON.stringify(newData));
   return newCount;
+}
+
+// ── RECOVERY SCORE PARSER ───────────────────────────────────
+function parseRecoveryAnalysis(text) {
+  const scoreMatch = text.match(/SCORE:\s*(\d+)/i);
+  const verdictMatch = text.match(/VERDICT:\s*(.+?)(?=\n|RECOMMENDATIONS|$)/i);
+  const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
+  const verdict = verdictMatch ? verdictMatch[1].trim() : null;
+  return { score, verdict, fullText: text };
 }
 
 // ── HOME SCREEN ─────────────────────────────────────────────
@@ -204,6 +211,22 @@ export default function HomeScreen({ route, navigation }) {
   const [waterGoalReached, setWaterGoalReached] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [streakCount, setStreakCount] = useState(0);
+
+  // Pre-workout state
+  const [showPreWorkoutModal, setShowPreWorkoutModal] = useState(false);
+  const [hoursUntil, setHoursUntil] = useState('3');
+  const [workoutType, setWorkoutType] = useState('long run');
+  const [workoutIntensity, setWorkoutIntensity] = useState('moderate');
+  const [preWorkoutAdvice, setPreWorkoutAdvice] = useState('');
+  const [loadingAdvice, setLoadingAdvice] = useState(false);
+
+  // Recovery state
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [hoursSince, setHoursSince] = useState('0.5');
+  const [recoveryWorkoutType, setRecoveryWorkoutType] = useState('long run');
+  const [recoveryIntensity, setRecoveryIntensity] = useState('moderate');
+  const [recoveryResult, setRecoveryResult] = useState(null);
+  const [loadingRecovery, setLoadingRecovery] = useState(false);
 
   const targets = isTrainingDay ? macros.trainingDay : macros.restDay;
 
@@ -245,7 +268,6 @@ export default function HomeScreen({ route, navigation }) {
       setMeals(grouped);
       setConsumed(total);
 
-      // Update streak based on whether meals were logged today
       const hasMeals = loadedMeals.length > 0;
       const streak = await updateStreak(hasMeals);
       setStreakCount(streak);
@@ -283,7 +305,6 @@ export default function HomeScreen({ route, navigation }) {
         carbs: prev.carbs + foodData.carbs,
         fat: prev.fat + foodData.fat,
       }));
-      // Update streak since a meal was just logged
       const streak = await updateStreak(true);
       setStreakCount(streak);
     } catch (e) { alert('Failed to save meal.'); }
@@ -301,6 +322,57 @@ export default function HomeScreen({ route, navigation }) {
         fat: prev.fat - food.fat,
       }));
     } catch (e) { alert('Failed to delete.'); }
+  };
+
+  const handleGetPreWorkoutAdvice = async () => {
+    if (!hoursUntil || parseFloat(hoursUntil) <= 0) {
+      alert('Please enter valid hours until workout');
+      return;
+    }
+    setLoadingAdvice(true);
+    setPreWorkoutAdvice('');
+    try {
+      const response = await aiAPI.preWorkout({
+        hours_until_workout: parseFloat(hoursUntil),
+        workout_type: workoutType,
+        workout_intensity: workoutIntensity,
+      });
+      setPreWorkoutAdvice(response.data.advice);
+    } catch (error) {
+      setPreWorkoutAdvice('⚠️ Could not generate advice. Please try again.');
+    } finally {
+      setLoadingAdvice(false);
+    }
+  };
+
+  const handleGetRecoveryAnalysis = async () => {
+    if (!hoursSince || parseFloat(hoursSince) < 0) {
+      alert('Please enter valid hours since workout');
+      return;
+    }
+    setLoadingRecovery(true);
+    setRecoveryResult(null);
+    try {
+      const response = await aiAPI.recovery({
+        hours_since_workout: parseFloat(hoursSince),
+        workout_type: recoveryWorkoutType,
+        workout_intensity: recoveryIntensity,
+      });
+      const parsed = parseRecoveryAnalysis(response.data.analysis);
+      setRecoveryResult({
+        ...parsed,
+        windowOpen: response.data.recovery_window_open,
+      });
+    } catch (error) {
+      setRecoveryResult({
+        score: null,
+        verdict: '⚠️ Could not generate analysis. Please try again.',
+        fullText: '',
+        windowOpen: false,
+      });
+    } finally {
+      setLoadingRecovery(false);
+    }
   };
 
   const getMealCal = (t) => meals[t].reduce((s, f) => s + f.calories, 0);
@@ -346,6 +418,12 @@ export default function HomeScreen({ route, navigation }) {
       </View>
     );
   }
+
+  const recoveryScoreColor = recoveryResult?.score == null
+    ? DT.textSec
+    : recoveryResult.score >= 80 ? DT.lime
+    : recoveryResult.score >= 50 ? DT.carb
+    : DT.danger;
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -461,7 +539,6 @@ export default function HomeScreen({ route, navigation }) {
             </View>
             <GlowBar value={waterData.total_ml} max={waterData.goal_ml} color={DT.water} />
 
-            {/* CONFETTI + GOAL BADGE */}
             <View style={{ position: 'relative' }}>
               <WaterConfetti active={showConfetti} />
               {waterGoalReached && (
@@ -497,6 +574,43 @@ export default function HomeScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
           </Card>
+        </View>
+
+        {/* ── AI FEATURES ROW: PRE-WORKOUT | RECOVERY ── */}
+        <View style={styles.aiFeaturesRow}>
+          <TouchableOpacity
+            style={styles.aiFeatureCard}
+            onPress={() => setShowPreWorkoutModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.aiFeatureIconBadge}>
+              <Text style={{ fontSize: 22 }}>⚡</Text>
+            </View>
+            <View style={styles.aiFeatureInfo}>
+              <Text style={styles.aiFeatureTitle}>Pre-Workout Fuel</Text>
+              <Text style={styles.aiFeatureSubtitle}>
+                Get fueling strategy before your session
+              </Text>
+            </View>
+            <Text style={styles.aiFeatureArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.aiFeatureCard}
+            onPress={() => setShowRecoveryModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.aiFeatureIconBadge, { backgroundColor: 'rgba(61,184,200,0.12)' }]}>
+              <Text style={{ fontSize: 22 }}>🔄</Text>
+            </View>
+            <View style={styles.aiFeatureInfo}>
+              <Text style={styles.aiFeatureTitle}>Recovery Analyzer</Text>
+              <Text style={styles.aiFeatureSubtitle}>
+                Check your post-workout nutrition
+              </Text>
+            </View>
+            <Text style={[styles.aiFeatureArrow, { color: DT.fat }]}>→</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── BOTTOM ROW: DIARY | STATS ── */}
@@ -596,6 +710,235 @@ export default function HomeScreen({ route, navigation }) {
         mealType={currentMealType}
         onAddFood={handleAddFood}
       />
+
+      {/* AI PRE-WORKOUT MODAL */}
+      <Modal visible={showPreWorkoutModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalCard}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalHeaderMono}>AI POWERED</Text>
+                <Text style={styles.modalTitle}>⚡ Pre-Workout Fuel</Text>
+              </View>
+              <TouchableOpacity onPress={() => {
+                setShowPreWorkoutModal(false);
+                setPreWorkoutAdvice('');
+              }}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!preWorkoutAdvice && !loadingAdvice && (
+              <>
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>HOURS UNTIL WORKOUT</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="3"
+                    placeholderTextColor={DT.textTert}
+                    value={hoursUntil}
+                    onChangeText={setHoursUntil}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>WORKOUT TYPE</Text>
+                  <View style={styles.chipRow}>
+                    {['easy run', 'long run', 'intervals', 'race day', 'strength'].map(type => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.chip, workoutType === type && styles.chipActive]}
+                        onPress={() => setWorkoutType(type)}
+                      >
+                        <Text style={[styles.chipText, workoutType === type && styles.chipTextActive]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>INTENSITY</Text>
+                  <View style={styles.chipRow}>
+                    {['easy', 'moderate', 'hard', 'race day'].map(intensity => (
+                      <TouchableOpacity
+                        key={intensity}
+                        style={[styles.chip, workoutIntensity === intensity && styles.chipActive]}
+                        onPress={() => setWorkoutIntensity(intensity)}
+                      >
+                        <Text style={[styles.chipText, workoutIntensity === intensity && styles.chipTextActive]}>
+                          {intensity}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.modalSubmitBtn}
+                  onPress={handleGetPreWorkoutAdvice}
+                >
+                  <Text style={styles.modalSubmitBtnText}>Get My Fuel Plan →</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {loadingAdvice && (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color={DT.lime} />
+                <Text style={styles.modalLoadingText}>Analyzing your nutrition data...</Text>
+              </View>
+            )}
+
+            {preWorkoutAdvice && !loadingAdvice && (
+              <>
+                <View style={styles.adviceBox}>
+                  <Text style={styles.adviceText}>{preWorkoutAdvice}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.modalSubmitBtnOutline}
+                  onPress={() => setPreWorkoutAdvice('')}
+                >
+                  <Text style={styles.modalSubmitBtnOutlineText}>Ask Again</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* AI RECOVERY MODAL */}
+      <Modal visible={showRecoveryModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalCard}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={[styles.modalHeaderMono, { color: DT.fat }]}>AI POWERED</Text>
+                <Text style={styles.modalTitle}>🔄 Recovery Check</Text>
+              </View>
+              <TouchableOpacity onPress={() => {
+                setShowRecoveryModal(false);
+                setRecoveryResult(null);
+              }}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!recoveryResult && !loadingRecovery && (
+              <>
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>HOURS SINCE WORKOUT ENDED</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="0.5"
+                    placeholderTextColor={DT.textTert}
+                    value={hoursSince}
+                    onChangeText={setHoursSince}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>WORKOUT TYPE</Text>
+                  <View style={styles.chipRow}>
+                    {['easy run', 'long run', 'intervals', 'race day', 'strength'].map(type => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.chip, recoveryWorkoutType === type && styles.chipActiveTeal]}
+                        onPress={() => setRecoveryWorkoutType(type)}
+                      >
+                        <Text style={[styles.chipText, recoveryWorkoutType === type && styles.chipTextActiveTeal]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalInputGroup}>
+                  <Text style={styles.modalInputLabel}>INTENSITY</Text>
+                  <View style={styles.chipRow}>
+                    {['easy', 'moderate', 'hard', 'race day'].map(intensity => (
+                      <TouchableOpacity
+                        key={intensity}
+                        style={[styles.chip, recoveryIntensity === intensity && styles.chipActiveTeal]}
+                        onPress={() => setRecoveryIntensity(intensity)}
+                      >
+                        <Text style={[styles.chipText, recoveryIntensity === intensity && styles.chipTextActiveTeal]}>
+                          {intensity}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, { backgroundColor: DT.fat }]}
+                  onPress={handleGetRecoveryAnalysis}
+                >
+                  <Text style={styles.modalSubmitBtnText}>Analyze My Recovery →</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {loadingRecovery && (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color={DT.fat} />
+                <Text style={styles.modalLoadingText}>Analyzing your recovery nutrition...</Text>
+              </View>
+            )}
+
+            {recoveryResult && !loadingRecovery && (
+              <>
+                {/* SCORE RING */}
+                {recoveryResult.score !== null && (
+                  <View style={styles.recoveryScoreContainer}>
+                    <View style={[styles.recoveryScoreRing, { borderColor: recoveryScoreColor }]}>
+                      <Text style={[styles.recoveryScoreNum, { color: recoveryScoreColor }]}>
+                        {recoveryResult.score}
+                      </Text>
+                      <Text style={styles.recoveryScoreLabel}>/ 100</Text>
+                    </View>
+                    {recoveryResult.windowOpen && (
+                      <View style={styles.recoveryWindowBadge}>
+                        <Text style={styles.recoveryWindowBadgeText}>⏱ Recovery window still open</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {recoveryResult.verdict && (
+                  <Text style={styles.recoveryVerdict}>{recoveryResult.verdict}</Text>
+                )}
+
+                <View style={[styles.adviceBox, { borderColor: 'rgba(61,184,200,0.2)' }]}>
+                  <Text style={styles.adviceText}>{recoveryResult.fullText}</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.modalSubmitBtnOutline}
+                  onPress={() => setRecoveryResult(null)}
+                >
+                  <Text style={styles.modalSubmitBtnOutlineText}>Check Again</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+          </ScrollView>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -697,6 +1040,49 @@ const styles = StyleSheet.create({
   // CONFETTI
   confettiContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50, overflow: 'hidden' },
 
+  // AI FEATURES ROW
+  aiFeaturesRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 20,
+  },
+  aiFeatureCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: DT.card,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(203,255,71,0.25)',
+  },
+  aiFeatureIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: DT.limeDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiFeatureInfo: { flex: 1 },
+  aiFeatureTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DT.text,
+    marginBottom: 2,
+  },
+  aiFeatureSubtitle: {
+    fontSize: 11,
+    color: DT.textSec,
+    lineHeight: 15,
+  },
+  aiFeatureArrow: {
+    fontSize: 16,
+    color: DT.lime,
+    fontWeight: '700',
+  },
+
   // BOTTOM ROW
   bottomRow: { flexDirection: 'row', gap: 20, alignItems: 'flex-start' },
   diaryCard: { flex: 1.4 },
@@ -734,4 +1120,190 @@ const styles = StyleSheet.create({
   phaseCardLabel: { fontSize: 13, fontWeight: '600', color: DT.text },
   phaseCardCal: { fontSize: 13, fontWeight: '700', color: DT.text },
   phaseCardMacros: { fontSize: 11, color: DT.textSec },
+
+  // MODAL (SHARED)
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalScroll: {
+    maxHeight: '85%',
+  },
+  modalCard: {
+    backgroundColor: DT.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: DT.border,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  modalHeaderMono: {
+    fontSize: 10,
+    color: DT.lime,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: DT.text,
+    letterSpacing: -0.5,
+  },
+  modalClose: { fontSize: 20, color: DT.textSec },
+  modalInputGroup: { marginBottom: 20 },
+  modalInputLabel: {
+    fontSize: 9,
+    color: DT.textSec,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  modalInput: {
+    backgroundColor: DT.cardAlt,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: DT.text,
+    borderWidth: 1,
+    borderColor: DT.border,
+    fontWeight: '600',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: DT.cardAlt,
+    borderWidth: 1,
+    borderColor: DT.border,
+  },
+  chipActive: {
+    backgroundColor: DT.limeDim,
+    borderColor: DT.lime,
+  },
+  chipActiveTeal: {
+    backgroundColor: 'rgba(61,184,200,0.12)',
+    borderColor: DT.fat,
+  },
+  chipText: {
+    fontSize: 12,
+    color: DT.textSec,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  chipTextActive: {
+    color: DT.lime,
+    fontWeight: '700',
+  },
+  chipTextActiveTeal: {
+    color: DT.fat,
+    fontWeight: '700',
+  },
+  modalSubmitBtn: {
+    backgroundColor: DT.lime,
+    borderRadius: 14,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  modalSubmitBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: DT.bg,
+  },
+  modalLoading: {
+    alignItems: 'center',
+    paddingVertical: 50,
+    gap: 16,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: DT.textSec,
+  },
+  adviceBox: {
+    backgroundColor: DT.cardAlt,
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(203,255,71,0.2)',
+    marginBottom: 16,
+  },
+  adviceText: {
+    fontSize: 14,
+    color: DT.text,
+    lineHeight: 23,
+  },
+  modalSubmitBtnOutline: {
+    borderRadius: 14,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: DT.border,
+  },
+  modalSubmitBtnOutlineText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: DT.textSec,
+  },
+
+  // RECOVERY SPECIFIC
+  recoveryScoreContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recoveryScoreRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: DT.bg,
+    marginBottom: 10,
+  },
+  recoveryScoreNum: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  recoveryScoreLabel: {
+    fontSize: 11,
+    color: DT.textSec,
+    marginTop: -2,
+  },
+  recoveryWindowBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(61,184,200,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(61,184,200,0.3)',
+  },
+  recoveryWindowBadgeText: {
+    fontSize: 12,
+    color: DT.fat,
+    fontWeight: '700',
+  },
+  recoveryVerdict: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: DT.text,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
 });
